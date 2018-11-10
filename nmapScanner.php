@@ -4,7 +4,8 @@
  * Name         : nmapScanner.php
  * Author       : litebito
  * Created      : 07-apr-2018
- * Version      : 1.0
+ * Updated      : 10-nov-2018
+ * Version      : 1.1
  * Description  : This script performs a similar function as pingScanner.php, but using nmap.
  *                This script will do a scan and discovery in one, so this script should find hosts which are not found by the standard scanner.
  *                It also will be able to find all MAC addresses (which the standard discovery does not seem to be able to do)
@@ -72,7 +73,7 @@ $xmlread = new XMLReader;
 $scriptname = basename(__FILE__);
 $logdir = "/var/log/";
 $logfile = $logdir.$scriptname.".log"; // logging
-$debuglevel = 2 ; // 1 = errors 2 = info 3 = debug
+$debuglevel = 3 ; // 1 = errors 2 = info 3 = debug
 $nmapdir = "/var/log/"; // where you want to save the nmap outputfiles for further processing
 $nmapdns = "-dns-servers x.x.x.x" ; // update with the (internal) dns servers on your network, the dns servers which have the host records about the subnets you are scanning
 
@@ -125,8 +126,10 @@ $ipam_sections = $arr_result['data'];
 
 // Run through each section from PHPIPAM
 foreach ($ipam_sections as $ipam_section) {
+    logger(2,"====================================================================================================");
     logger(2,"Section name {$ipam_section['name']}");
-    $API->execute ("GET", "sections", array($ipam_section['id'],"subnets"), array(), $token_file);
+    logger(2,"====================================================================================================");
+        $API->execute ("GET", "sections", array($ipam_section['id'],"subnets"), array(), $token_file);
     $APIresult = $API->get_result();
     $arr_result = json_decode($APIresult, true);
     $ipam_subnets = $arr_result['data'];
@@ -136,11 +139,14 @@ foreach ($ipam_sections as $ipam_section) {
         // Check if the subnet is set to be discovered
         if ($ipam_subnet['discoverSubnet'] == "1")
         {
+            logger(2,"---------------------------------------------------------------------------------------------------------");
             logger(2,"The subnet {$ipam_subnet['subnet']}/{$ipam_subnet['mask']} is flagged for discovery, starting the work");
+            logger(2,"---------------------------------------------------------------------------------------------------------");
+
             $_subnet2scan = $ipam_subnet['subnet'] . "/" . $ipam_subnet['mask'];
             $nmapfile = $nmapdir . "nmapscan_" . $ipam_subnet['subnet'] . "_" . $ipam_subnet['mask'].".xml";
             logger(3,"Nmap outputfile $nmapfile");
-            exec("nmap -sn -PR -R -oX $nmapfile $nmapdns $_subnet2scan", $output);
+            exec("nmap -sn -PR -PE -R -oX $nmapfile $nmapdns $_subnet2scan", $output);
             $API->execute ("GET", "subnets", array($ipam_subnet['id'],"addresses"), array(), $token_file);
             $APIresult = $API->get_result();
             $arr_result = json_decode($APIresult, true);
@@ -151,6 +157,7 @@ foreach ($ipam_sections as $ipam_section) {
                 logger(1,"Something went wrong, failed to open $nmapfile");
             } #end if
             // Phase 1 : check for every ipaddress from the NMAP scan against PHPIPAM
+            logger(3,"PHASE 1 : NMAP against IPAM : check every IP from $nmapfile for {$ipam_subnet['subnet']}/{$ipam_subnet['mask']} against IPAM");
             $i = 1;
             while($xmlread->read())
             {
@@ -161,7 +168,7 @@ foreach ($ipam_sections as $ipam_section) {
                 } #end if
                 $_nhostname ="NA";
                 $_nhostipv4 = "NA";
-                $_nhostmac = "NA";
+                $_nhostmac = "00:00:00:00:00:00";
                 $_nhostreason = "NA";
                 if ($xmlread->nodeType == XMLReader::ELEMENT && $xmlread->name == 'host')
                 {
@@ -175,7 +182,7 @@ foreach ($ipam_sections as $ipam_section) {
                         if ($hostelement['state'] == "up") { $_nhostreason = $hostelement['reason']; }
                     } #end foreach
                     $_nmapinfo = "Type: " . $_nhostreason . " / MAC: " . $_nhostmac;
-                    logger(3,"Hostnode $i has : hostipv4: $_nhostipv4 - hostmac: $_nhostmac - hostname: $_nhostname");
+                    logger(3,"HOSTNODE $i has : hostipv4: $_nhostipv4 - hostmac: $_nhostmac - hostname: $_nhostname");
                     $i++;
                     // We have a host and its elements, now we can search for this IP in the current PHPIPAM subnet
                     $found = false;
@@ -205,6 +212,8 @@ foreach ($ipam_sections as $ipam_section) {
             } #end while($xmlread->read())
             $xmlread->close;
             // Now we'll run though all hosts of the subnet again, to update the hosts which were not found by the Nmap scanner we'll do this by comparing the custom field cLastSeen date
+            // Phase 2 : Now we'll run though all hosts of the subnet again, to update the hosts which were not found by the Nmap scanner we'll do this by comparing the custom field cLastSeen date
+            logger(3,"PHASE 2 : IPAM against NMAP : Check subnet {$ipam_subnet['subnet']}/{$ipam_subnet['mask']} from IPAM again for hosts not found in the nmapscan $nmapfile");
             foreach ($ipam_hosts as $ipam_host)
             {
                 logger(3,"Checking host with {$ipam_host['ip']} for lastSeen {$ipam_host['lastSeen']}, cLastSeen {$ipam_host['custom_cLastSeen']}, tag {$ipam_host['tag']}");
