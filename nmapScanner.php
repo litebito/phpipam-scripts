@@ -4,7 +4,8 @@
  * Name         : nmapScanner.php
  * Author       : litebito
  * Created      : 07-apr-2018
- * Version      : 1.0
+ * Updated      : 10-nov-2018
+ * Version      : 1.1
  * Description  : This script performs a similar function as pingScanner.php, but using nmap.
  *                This script will do a scan and discovery in one, so this script should find hosts which are not found by the standard scanner.
  *                It also will be able to find all MAC addresses (which the standard discovery does not seem to be able to do)
