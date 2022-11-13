@@ -1,3 +1,6 @@
+(as I do not have much time, I can only occasionally support/update this script.
+if there is any dev who would like to join and make this script better, or integrate it officially with phpIPAM, let me know)
+
 # phpipam-scripts
 These are various scripts to work in conjunction with PHPIPAM (https://github.com/phpipam/phpipam)
 
