@@ -185,6 +185,7 @@ foreach ($ipam_sections as $ipam_section) {
                     $_lastseen = date('Y-m-d H:i:s',$xmlread->getAttribute('start')); // convert from the nmap epoch string
                     logger(3,"Checking lastseen from start attribute (epoch) : $_lastseen");
                 } #end if
+                // setting bogus values
                 $_nhostname ="NA";
                 $_nhostipv4 = "NA";
                 $_nhostmac = "00:00:00:00:00:00";
@@ -224,12 +225,25 @@ foreach ($ipam_sections as $ipam_section) {
                             if ($ipam_host['excludePing'] != "1" )
                             {
                                 logger(2, "Match found for $_nhostipv4, updating PHPIPAM with $_nhostname, $_nhostmac, $_lastseen, $_nhostreason");
-                                $API->execute ("PATCH", "addresses", array($ipam_host['id']), array("mac"=>"$_nhostmac", "tag"=>2, "lastSeen"=>$_lastseen, "custom_cAgeOffline"=>"0", "custom_cNmapInfo"=>$_nmapinfo, "custom_cLastSeen"=>$_lastseen), $token_file);
+                                // split the execution to avoid updating phpIPAM with the bogus values, fix for the fact that NMAP cannot get MAC addresses beyon the local subnet
+                                $API->execute ("PATCH", "addresses", array($ipam_host['id']), array( "tag"=>2, "lastSeen"=>$_lastseen, "custom_cAgeOffline"=>"0", "custom_cNmapInfo"=>$_nmapinfo, "custom_cLastSeen"=>$_lastseen), $token_file);
                                 $APIresult = $API->get_result();
+                                if ($_nhostmac != "00:00:00:00:00:00")
+                                {
+                                    logger(3, "Updating $_nhostipv4, in PHPIPAM with MAC $_nhostmac");
+                                    $API->execute ("PATCH", "addresses", array($ipam_host['id']), array("mac"=>"$_nhostmac"), $token_file);
+                                    $APIresult = $API->get_result();
+                                }
+                                else 
+                                {
+                                    logger(3, "NOT Updating $_nhostipv4, scanned MAC is empty :  $_nhostmac");
+                                    
+                                }
+                                
                                 $arr_result = json_decode($APIresult, true);
                                 if($arr_result["code"]!="200") { logger(1,"There was an error updating {$ipam_host['ip']}, message from PHPIPAM : {$arr_result["message"]}");  }
                                 else { 
-                                    // TO UNCOMMENT logger(3,"Update was successful for {$ipam_host['ip']}, message from PHPIPAM : {$arr_result["message"]}"); 
+                                    logger(3,"Update was successful for {$ipam_host['ip']}, message from PHPIPAM : {$arr_result["message"]}"); 
                                 }
                             } #end if
                             else
@@ -238,7 +252,19 @@ foreach ($ipam_sections as $ipam_section) {
                             } #end else
                         } #end if
                     } #end foreach
-                    if ($found == false) { logger(2, "No match found for $_nhostipv4, we need to add the new host to PHPIPAM"); } #end if
+                    if ($found == false) 
+                        { 
+                            logger(2, "No match found for $_nhostipv4, we need to add the new host to PHPIPAM");
+                            $API->execute ("POST", "addresses",  $_nhostipv4, array( "tag"=>2, "lastSeen"=>$_lastseen, "custom_cAgeOffline"=>"0", "custom_cNmapInfo"=>$_nmapinfo, "custom_cLastSeen"=>$_lastseen), $token_file);
+                            $APIresult = $API->get_result();
+                            $arr_result = json_decode($APIresult, true);
+                            if($arr_result["code"]!="200") { logger(1,"There was an error INSERTING $_nhostipv4, message from PHPIPAM : {$arr_result["message"]}");  }
+                            else {
+                                logger(3,"INSERT was successful for $_nhostipv4, message from PHPIPAM : {$arr_result["message"]}");
+                            }
+                            
+                            
+                        } #end if
                 } #end if ($xmlread->nodeType == XMLReader::ELEMENT && $xmlread->name == 'host')
             } #end while($xmlread->read())
             $xmlread->close;
