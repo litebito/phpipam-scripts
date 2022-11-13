@@ -27,9 +27,13 @@ So the code may look messy and not optimal.
 Feel free to contribute (suggestions, corrections, ....)
 
 You will also need the following files from the phpipam-api-client repo:
+
 https://github.com/phpipam/phpipam-api-clients/tree/master/php-client
+
 class.PHPIPAM-api.php
+
 api-config.php
+
 
 Disclaimer:
 
