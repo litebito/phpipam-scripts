@@ -1,11 +1,10 @@
 <?php
-
 /**
  * Name         : nmapScanner.php
  * Author       : litebito
  * Created      : 07-apr-2018
- * Updated      : 10-nov-2018
- * Version      : 1.1
+ * Updated      : 10-nov-2022
+ * Version      : 2.0
  * Description  : This script performs a similar function as pingScanner.php, but using nmap.
  *                This script will do a scan and discovery in one, so this script should find hosts which are not found by the standard scanner.
  *                It also will be able to find all MAC addresses (which the standard discovery does not seem to be able to do)
@@ -16,7 +15,7 @@
  *                The author is NOT responsible for any data or system losses caused by this script. Do NOT use this script if you cannot read/understand PHP.
  *
  * This script does the following:
- * 		- fetches flagged subnets for scanning
+ *              - fetches flagged subnets for scanning
  *      - scans the whole subnet witn Nmap, this will also scan hosts which do not respond to ping and discover missing MAC
  *      - FOR EACH scan enabled/toggled SUBNET from PHPIPAM, there are 2 phases and assumes that this nmap scanner script is "the boss" (it will overwrite any other scan/discovery in case of conflicts.)
  *      - Phase 1 : start from the nmap output of the subnet, and update or add to PHPIPAM, that way, we need to read the file only once
@@ -31,17 +30,18 @@
  *      - all updates to PHPIPAM are done using the PHPIPAM API
  *
  *  Requirements :
- *      - nmap 6.40+ installed (default nmap install)
- *      - PHPIPAM 1.3+ (and PHPIPAM api setup correctly)
+ *      - nmap 7.0+ installed (default nmap install)
+ *      - PHPIPAM 1.5+ (and PHPIPAM api setup correctly)
  *      - PHPIPAM ip address custom fields:  (I use them for different purposes in my setup, not everyone may need them)
  *              cAgeOffline, cLastSeen, cNmapInfo
- *      - class.PHPIPAM-api.php needs to be present in /ipam/functions/classes/
+ *      - class.PHPIPAM-api.php needs to be present in /ipam/functions/classes/ (source: https://github.com/phpipam/phpipam-api-clients/tree/master/php-client )
  *      - api-config.php needs to be present in /ipam/functions/scripts
  *      - this script itself needs to be present in /ipam/functions/scripts
+ *      - WARNING : for now, this script still requires mcript, so uncomment $api_crypt_encryption_library = "mcrypt"; in config.php (I did not have the time to fix it for openssl)
  *      - script needs to run as root, as per nmap requirement (nmap needs to be run as root in order todo ping scans)
  *
- *	Script can be run from cron, here is a crontab example for 15 minutes scanning:
- * 		*\/15 * * * *  /usr/local/bin/php /<sitepath>/functions/scripts/nmapScanner.php > /dev/null 2>&1
+ *      Script can be run from cron, here is a crontab example for 15 minutes scanning:
+ *              *\/15 * * * *  /usr/local/bin/php /<sitepath>/functions/scripts/nmapScanner.php > /dev/null 2>&1
  *
  *  Future todo/wishlist:
  *      - do more error checking on the Nmap output (check if it was a success or not)
@@ -55,18 +55,21 @@
  *      - if nested subnets are all set to be scanned, subnets will be scanned multiple times. In other words, it will not check for (already scanned) parent subnets.
  *      - Using XMLreader to avoid loading entire xml file in memory, as scan files can grow very large (for example, an nmap output xml of a discoveryscan of a /8 can be as large as 4GB !)
  *  Known issues (bugs in the API??):
+ *      - there are errors when sections are empty:
+ *          - if the section in phpipam is empty, there is no array to iterate to, so it is ok, it is just not the cleanest solution
+ *          - if the subnet in phpipam is empty there is no array to iterate to, so it is ok, it is just not the cleanest solution
  *      - Does not seem to update the lastseen date in the PHPIPAM db, although the API does not return an error
  *      - Does not seem to update the tag (onnline/offline) in the PHPIPAM db? Although the API does not return an error
  *
  */
 
 // script can only be run from cli
-if(php_sapi_name()!="cli") 						{ die("This script can only be run from cli!"); }
+if(php_sapi_name()!="cli")                                              { die("This script can only be run from cli!"); }
 
 /*
  * Init
  */
-require("api-config.php");
+require("custom_api-config.php");
 require( dirname(__FILE__) . '/../../functions/classes/class.phpipam-api.php');
 $memstart = round(memory_get_usage()/1024,2);
 $xmlread = new XMLReader;
@@ -75,7 +78,7 @@ $logdir = "/var/log/";
 $logfile = $logdir.$scriptname.".log"; // logging
 $debuglevel = 3 ; // 1 = errors 2 = info 3 = debug
 $nmapdir = "/var/log/"; // where you want to save the nmap outputfiles for further processing
-$nmapdns = "-dns-servers x.x.x.x" ; // update with the (internal) dns servers on your network, the dns servers which have the host records about the subnets you are scanning
+$nmapdns = "-dns-servers 10.0.2.14,,10.0.2.1" ; // update with the (internal) dns servers on your network, the dns servers which have the host records about the subnets you are scanning
 
 // set now for whole script
 $now     = time();
@@ -85,13 +88,15 @@ $API = new PHPIPAM_api_client ($api_url, $api_app_id, $api_key, $api_username, $
 // debug - only to debug curl
 $API->set_debug (true);
 
+
+
 /*
  * Functions
  */
 
 // just a quick logging function for logging to a logfile and console
 function logger($level, $message){
-    $logtime = date("Y-m-d h:m:s");
+    $logtime = date("Y-m-d H:i:s");
     global $logfile;
     global $memstart;
     global $debuglevel;
@@ -112,20 +117,33 @@ function logger($level, $message){
 /*
  * Start Script
  */
+echo "\r\n";
+logger(2,"====================================================================================================");
+logger(2,"$scriptname STARTED...");
+logger(2,"====================================================================================================");
+echo "\r\n";
 
-logger(2,"Starting $scriptname ...");
 // get all sections from PHPIPAM
 $API->execute ("GET", "sections", array(), array(), $token_file);
 $APIresult = $API->get_result();
 logger(3,"Response Headers ...");
 logger(3,$response_headers);
+//logger(3,"API result:  ...");
+//logger(3,$APIresult);
+
 
 // Getting rid of the api response info, and create the array for sections
 $arr_result = json_decode($APIresult, true);
+logger(3,$arr_result);
+
+
+
 $ipam_sections = $arr_result['data'];
+
 
 // Run through each section from PHPIPAM
 foreach ($ipam_sections as $ipam_section) {
+    echo "\r\n";
     logger(2,"====================================================================================================");
     logger(2,"Section name {$ipam_section['name']}");
     logger(2,"====================================================================================================");
@@ -139,6 +157,7 @@ foreach ($ipam_sections as $ipam_section) {
         // Check if the subnet is set to be discovered
         if ($ipam_subnet['discoverSubnet'] == "1")
         {
+            echo "\r\n";
             logger(2,"---------------------------------------------------------------------------------------------------------");
             logger(2,"The subnet {$ipam_subnet['subnet']}/{$ipam_subnet['mask']} is flagged for discovery, starting the work");
             logger(2,"---------------------------------------------------------------------------------------------------------");
@@ -186,6 +205,16 @@ foreach ($ipam_sections as $ipam_section) {
                     $i++;
                     // We have a host and its elements, now we can search for this IP in the current PHPIPAM subnet
                     $found = false;
+                    if (is_iterable($ipam_hosts)) {
+                        //logger(3,"THISISANARRAY");
+                        }
+                    else
+                       {
+                        logger(3,"NOTANARRAY");
+                        print_r ($ipam_hosts);
+                       }
+                
+                    // if the nmapscan does not return hosts, $ipam_hosts is not an array, and the foreach below will fail. that is ok, because the nmapscan is empty anyway         
                     foreach ($ipam_hosts as $ipam_host)
                     {
                         if (($_nhostipv4 == $ipam_host['ip'])  )
@@ -199,7 +228,9 @@ foreach ($ipam_sections as $ipam_section) {
                                 $APIresult = $API->get_result();
                                 $arr_result = json_decode($APIresult, true);
                                 if($arr_result["code"]!="200") { logger(1,"There was an error updating {$ipam_host['ip']}, message from PHPIPAM : {$arr_result["message"]}");  }
-                                else { logger(3,"Update was successful for {$ipam_host['ip']}, message from PHPIPAM : {$arr_result["message"]}"); }
+                                else { 
+                                    // TO UNCOMMENT logger(3,"Update was successful for {$ipam_host['ip']}, message from PHPIPAM : {$arr_result["message"]}"); 
+                                }
                             } #end if
                             else
                             {
@@ -217,7 +248,7 @@ foreach ($ipam_sections as $ipam_section) {
             foreach ($ipam_hosts as $ipam_host)
             {
                 logger(3,"Checking host with {$ipam_host['ip']} for lastSeen {$ipam_host['lastSeen']}, cLastSeen {$ipam_host['custom_cLastSeen']}, tag {$ipam_host['tag']}");
-                // the below is still a bit messy, too much juggling with the dates, but for now, it works for what I need it.
+                // the below is still a bit messy, too much juggling with the dates, but for now, it works for what I need.
                 // because for now, we've 2 lastseen dates, as the API seems to be unable to update the lastseen in the PHPIPAM DB, we'll compare both results
                 $_lsnmap = new DateTime($_lastseen);
                 $_test = 2;
@@ -238,11 +269,13 @@ foreach ($ipam_sections as $ipam_section) {
                         $APIresult = $API->get_result();
                         $arr_result = json_decode($APIresult, true);
                         if($arr_result["code"]!="200") { logger(1,"There was an error updating {$ipam_host['ip']}, message from PHPIPAM : {$arr_result["message"]}");   }
-                        else { logger(3,"Update was successful for {$ipam_host['ip']}, message from PHPIPAM : {$arr_result["message"]}");   }
+                        else { 
+                            logger(3,"Update was successful for {$ipam_host['ip']}, message from PHPIPAM : {$arr_result["message"]}");   
+                        }
                 } #end if
                 else
                 {
-                    logger(3, "Host {$ipam_host['ip']}, does not need updating : Age is ($_age) or was set to be excluded from ping/scan, not updating PHPIPAM");
+                     logger(3, "Host {$ipam_host['ip']}, does not need updating : Age is ($_age) or was set to be excluded from ping/scan, not updating PHPIPAM");
                 } #end else
             } #end foreach ($ipam_hosts as $ipam_host)
         } #end if ($ipam_subnet['discoverSubnet'] == "1")
@@ -253,7 +286,11 @@ foreach ($ipam_sections as $ipam_section) {
     } #end foreach ($ipam_subnets as $ipam_subnet)
 }
 unset ($ipam_hosts, $ipam_host, $ipam_subnets, $ipam_subnet, $xmlread);
-logger(2,"All done!")
+
+echo "\r\n";
+logger(2,"====================================================================================================");
+logger(2,"$scriptname ENDED...");
+logger(2,"====================================================================================================");
+echo "\r\n";
+
 ?>
-
-
