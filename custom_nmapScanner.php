@@ -3,8 +3,8 @@
  * Name         : nmapScanner.php
  * Author       : litebito
  * Created      : 07-apr-2018
- * Updated      : 10-nov-2022
- * Version      : 2.0
+ * Updated      : 03-mar-2023
+ * Version      : 2.1
  * Description  : This script performs a similar function as pingScanner.php, but using nmap.
  *                This script will do a scan and discovery in one, so this script should find hosts which are not found by the standard scanner.
  *                It also will be able to find all MAC addresses (which the standard discovery does not seem to be able to do)
@@ -15,7 +15,7 @@
  *                The author is NOT responsible for any data or system losses caused by this script. Do NOT use this script if you cannot read/understand PHP.
  *
  * This script does the following:
- *              - fetches flagged subnets for scanning
+ *      - fetches flagged subnets for scanning
  *      - scans the whole subnet witn Nmap, this will also scan hosts which do not respond to ping and discover missing MAC
  *      - FOR EACH scan enabled/toggled SUBNET from PHPIPAM, there are 2 phases and assumes that this nmap scanner script is "the boss" (it will overwrite any other scan/discovery in case of conflicts.)
  *      - Phase 1 : start from the nmap output of the subnet, and update or add to PHPIPAM, that way, we need to read the file only once
@@ -33,7 +33,7 @@
  *      - nmap 7.0+ installed (default nmap install)
  *      - PHPIPAM 1.5+ (and PHPIPAM api setup correctly)
  *      - PHPIPAM ip address custom fields:  (I use them for different purposes in my setup, not everyone may need them)
- *              cAgeOffline, cLastSeen, cNmapInfo
+ *              cAgeOffline, cLastSeen, cNmapInfo, cDiscoveryScanComment
  *      - class.PHPIPAM-api.php needs to be present in /ipam/functions/classes/ (source: https://github.com/phpipam/phpipam-api-clients/tree/master/php-client )
  *      - api-config.php needs to be present in /ipam/functions/scripts
  *      - this script itself needs to be present in /ipam/functions/scripts
@@ -49,6 +49,7 @@
  *      - change this from API to native (incorporate nmap as a new option in the discoverycheck and pingcheck scripts)
  *      - use the DNS server info from PHPIPAM for Nmap
  *      - update the last scan setting on subnetlevel after running the script
+ *      - update age online
  *
  *  Other comments:
  *      - namp output in XML for easier processing, also has more data dan txt output
@@ -75,7 +76,7 @@ $memstart = round(memory_get_usage()/1024,2);
 $xmlread = new XMLReader;
 $scriptname = basename(__FILE__);
 $logdir = "/var/log/";
-$logfile = $logdir.$scriptname.".log"; // logging
+$logfile = $logdir."phpipam_".$scriptname.".log"; // logging
 $debuglevel = 3 ; // 1 = errors 2 = info 3 = debug
 $nmapdir = "/var/log/"; // where you want to save the nmap outputfiles for further processing
 $nmapdns = "-dns-servers 10.0.2.14,,10.0.2.1" ; // update with the (internal) dns servers on your network, the dns servers which have the host records about the subnets you are scanning
@@ -159,7 +160,7 @@ foreach ($ipam_sections as $ipam_section) {
         {
             echo "\r\n";
             logger(2,"---------------------------------------------------------------------------------------------------------");
-            logger(2,"The subnet {$ipam_subnet['subnet']}/{$ipam_subnet['mask']} is flagged for discovery, starting the work");
+            logger(2,"The subnet {$ipam_subnet['subnet']}/{$ipam_subnet['mask']}, subnetId {$ipam_subnet['id']} is flagged for discovery, starting the work");
             logger(2,"---------------------------------------------------------------------------------------------------------");
 
             $_subnet2scan = $ipam_subnet['subnet'] . "/" . $ipam_subnet['mask'];
@@ -208,6 +209,7 @@ foreach ($ipam_sections as $ipam_section) {
                     $found = false;
                     if (is_iterable($ipam_hosts)) {
                         //logger(3,"THISISANARRAY");
+                        //print_r ($ipam_hosts);
                         }
                     else
                        {
@@ -224,9 +226,11 @@ foreach ($ipam_sections as $ipam_section) {
                             $found = true;
                             if ($ipam_host['excludePing'] != "1" )
                             {
-                                logger(2, "Match found for $_nhostipv4, updating PHPIPAM with $_nhostname, $_nhostmac, $_lastseen, $_nhostreason");
+                                $_tmplogsubnetid = $ipam_subnet['id'];
+                                logger(2, "Match found for $_nhostipv4, in subnetID $_tmplogsubnetid, updating PHPIPAM with $_nhostname, $_nhostmac, $_lastseen, $_nhostreason");
+                                $_tmplogline = "Match found for $_nhostipv4, updating PHPIPAM with $_nhostname, $_nhostmac, $_lastseen, $_nhostreason";
                                 // split the execution to avoid updating phpIPAM with the bogus values, fix for the fact that NMAP cannot get MAC addresses beyon the local subnet
-                                $API->execute ("PATCH", "addresses", array($ipam_host['id']), array( "tag"=>2, "lastSeen"=>$_lastseen, "custom_cAgeOffline"=>"0", "custom_cNmapInfo"=>$_nmapinfo, "custom_cLastSeen"=>$_lastseen), $token_file);
+                                $API->execute ("PATCH", "addresses", array($ipam_host['id']), array( "tag"=>2, "lastSeen"=>$_lastseen, "hostname"=>strval($_nhostname), "custom_cAgeOffline"=>"0", "custom_cNmapInfo"=>$_nmapinfo, "custom_cLastSeen"=>$_lastseen, "custom_cDiscoveryScanComment"=>$_tmplogline), $token_file);
                                 $APIresult = $API->get_result();
                                 if ($_nhostmac != "00:00:00:00:00:00")
                                 {
@@ -254,10 +258,13 @@ foreach ($ipam_sections as $ipam_section) {
                     } #end foreach
                     if ($found == false) 
                         { 
-                            logger(2, "No match found for $_nhostipv4, we need to add the new host to PHPIPAM");
-                            $API->execute ("POST", "addresses",  $_nhostipv4, array( "tag"=>2, "lastSeen"=>$_lastseen, "custom_cAgeOffline"=>"0", "custom_cNmapInfo"=>$_nmapinfo, "custom_cLastSeen"=>$_lastseen), $token_file);
+                            $_tmplogsubnetid = $ipam_subnet['id'];
+                            logger(2, "No match found for $_nhostipv4 ($_nhostname), adding the new host to PHPIPAM to subnetid $_tmplogsubnetid.");
+                            $_tmplogline = "No match found for $_nhostipv4 ($_nhostname), adding the new host to to subnetid $_tmplogsubnetid to PHPIPAM";
+                            $API->execute ("POST", "addresses", array() , array( "subnetId"=>$ipam_subnet['id'] , "ip"=>strval($_nhostipv4), "hostname"=>strval($_nhostname), "mac"=>strval($_nhostmac), "tag"=>2, "lastSeen"=>$_lastseen, "custom_cAgeOffline"=>"0", "custom_cNmapInfo"=>$_nmapinfo, "custom_cLastSeen"=>$_lastseen, "custom_cDiscoveryScanComment"=>$_tmplogline), $token_file);
                             $APIresult = $API->get_result();
                             $arr_result = json_decode($APIresult, true);
+                            //print_r ($arr_result);
                             if($arr_result["code"]!="200") { logger(1,"There was an error INSERTING $_nhostipv4, message from PHPIPAM : {$arr_result["message"]}");  }
                             else {
                                 logger(3,"INSERT was successful for $_nhostipv4, message from PHPIPAM : {$arr_result["message"]}");
