@@ -6,6 +6,7 @@ These are various scripts to work in conjunction with PHPIPAM (https://github.co
 
 # nmapScanner.php: 
 script to use Nmap as scanning tool besides ping/fping
+works with phpIPAM 1.5.0
 
 This script does the following:
  
