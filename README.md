@@ -1,6 +1,10 @@
+Because of the limitations of phpipam, and the ongoing issues with its API, I've decided to migrate to NetBox.
+So I also want to concentrate the little dev time I have to my requirements with NetBox, therefore I've to abandon the phpipam scripts.
+I'll leave the repo online for a while, for those who are interested to copy what they need to move further.
+
 WARNING: the script no longer works with PHPipam 1.6+ and PHP 8.3+
 it seems quite a few things are broken now. I tried to start fixing, but as I'm not an expert in PHP and API's so I'm not sure if I ever get it fixed ... 
-if anyone out there want's to have a go, veel free to leave me a message
+if anyone out there want's to have a go, feel free to leave me a message
 
 (as I do not have much time, I can only occasionally support/update this script.
 if there is any dev who would like to join and make this script better, or integrate it officially with phpIPAM, let me know)
