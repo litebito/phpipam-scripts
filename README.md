@@ -6,9 +6,6 @@ WARNING: the script no longer works with PHPipam 1.6+ and PHP 8.3+
 it seems quite a few things are broken now. I tried to start fixing, but as I'm not an expert in PHP and API's so I'm not sure if I ever get it fixed ... 
 if anyone out there want's to have a go, feel free to leave me a message
 
-(as I do not have much time, I can only occasionally support/update this script.
-if there is any dev who would like to join and make this script better, or integrate it officially with phpIPAM, let me know)
-
 # phpipam-scripts
 These are various scripts to work in conjunction with PHPIPAM (https://github.com/phpipam/phpipam)
 
