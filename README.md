@@ -1,5 +1,7 @@
 Because of the limitations of phpipam, and the ongoing issues with its API, I've decided to migrate to NetBox.
+
 So I also want to concentrate the little dev time I have to my requirements with NetBox, therefore I've to abandon the phpipam scripts.
+There also seems to be no real interest from others to take over this script and develop it further.
 I'll leave the repo online for a while, for those who are interested to copy what they need to move further.
 
 WARNING: the script no longer works with PHPipam 1.6+ and PHP 8.3+
