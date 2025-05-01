@@ -1,12 +1,12 @@
 Because of the limitations of phpipam, and the ongoing issues with its API, I've decided to migrate to NetBox.
 
-So I also want to concentrate the little dev time I have to my requirements with NetBox, therefore I've to abandon the phpipam scripts.
-There also seems to be no real interest from others to take over this script and develop it further.
-I'll leave the repo online for a while, for those who are interested to copy what they need to move further.
+*I've written a script with a similar purpose for NetBox (https://github.com/litebito/netbox-ipam-scanner)*
+
+So I want to concentrate the little dev time I have to my requirements with NetBox, therefore I've to abandon these phpipam scripts.
 
 WARNING: the script no longer works with PHPipam 1.6+ and PHP 8.3+
-it seems quite a few things are broken now. I tried to start fixing, but as I'm not an expert in PHP and API's so I'm not sure if I ever get it fixed ... 
-if anyone out there want's to have a go, feel free to leave me a message
+it seems quite a few things are broken now. I tried to start fixing, but there seem to be quite a few issues with the API, and as I'm not an expert PHP developer I've not been able to fix these things. 
+if anyone out there want's to have a go, feel free to copy the scripts and move on with it (if you like to copy the repo, leave me a message). I'll leave the repo online for a while, for those who are interested to copy what they need to move further.
 
 # phpipam-scripts
 These are various scripts to work in conjunction with PHPIPAM (https://github.com/phpipam/phpipam)
